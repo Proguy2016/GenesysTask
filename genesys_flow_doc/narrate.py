@@ -19,6 +19,9 @@ log = logging.getLogger(__name__)
 
 MODEL = "claude-opus-5"
 
+#: A leading "1." / "2)" list marker in the summary Markdown.
+_ORDERED_MARKER = re.compile(r"^\d+[.)]\s*")
+
 SYSTEM = """You write internal documentation for contact-centre operations teams.
 
 You will be given a structured digest of one Genesys Cloud Architect call flow.
@@ -158,7 +161,10 @@ def _summary_to_html(summary: str) -> str:
                 close_list()
                 out.append("<ol>")
                 list_tag = "ol"
-            out.append(f"<li>{re.sub(r'^\d+[.)]\s*', '', text)}</li>")
+            # Computed outside the f-string: a backslash inside an f-string
+            # expression is a syntax error before Python 3.12.
+            item = _ORDERED_MARKER.sub("", text)
+            out.append(f"<li>{item}</li>")
         elif stripped.startswith(("- ", "* ")):
             if list_tag != "ul":
                 close_list()

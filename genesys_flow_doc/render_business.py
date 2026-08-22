@@ -15,6 +15,9 @@ from .speech import dedupe
 MAX_QUOTE = 400
 GUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
+#: Strips the trailing `` (`guid`) `` from a sibling-flow label.
+_STRIP_ID = re.compile(r"\s*`[^`]+`")
+
 
 def _quote(text: str) -> str:
     text = re.sub(r"\s+", " ", str(text)).strip()
@@ -277,7 +280,10 @@ def render(doc: FlowDoc) -> str:
     if doc.ivr:
         out.append(f"| **Call route** | {_cell(doc.ivr.get('name'))} |")
     for role, target in doc.sibling_flows.items():
-        out.append(f"| **{role}** | {_cell(re.sub(r'\\s*`[^`]+`', '', target))} |")
+        # Computed outside the f-string: a backslash inside an f-string
+        # expression is a syntax error before Python 3.12.
+        without_id = _STRIP_ID.sub("", target)
+        out.append(f"| **{role}** | {_cell(without_id)} |")
     out.append(f"| **Language** | {_cell(doc.default_language)} |")
     out.append(f"| **Menus and stages** | {len(doc.containers)} |")
     out.append(f"| **Steps in total** | {sum(1 for _ in doc.all_nodes())} |")
