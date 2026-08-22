@@ -1,5 +1,10 @@
 # genesys-flow-doc
 
+[![CI](https://github.com/Proguy2016/GenesysTask/actions/workflows/ci.yml/badge.svg)](https://github.com/Proguy2016/GenesysTask/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Read-only](https://img.shields.io/badge/Genesys%20API-read--only-0b6e62.svg)](SECURITY.md)
+
 Reads Genesys Cloud Architect call flows through the Platform API and writes
 documentation for two audiences: a plain-English business document and a full
 technical specification.
@@ -20,7 +25,8 @@ technical specification.
 - [How a run flows through the code](#how-a-run-flows-through-the-code)
 - [How the parser works](#how-the-parser-works)
 - [Validated against a real organisation](#validated-against-a-real-organisation)
-- [Tests](#tests)
+- [Tests and CI](#tests-and-ci)
+- [Licence](#licence)
 
 ---
 
@@ -148,7 +154,23 @@ python -m genesys_flow_doc --offline out/lab-ivr-flow.raw.json
 | `-i` / `--interactive` | Force the guided menu |
 | `-v` | Detailed progress |
 
-### A console URL points at a *call route*, not a flow
+### Which console URLs are accepted
+
+Paste any of these; the region is read from the host and the right ID is picked
+out of the path:
+
+| URL shape | Treated as |
+| --- | --- |
+| `/directory/#/admin/routing/ivrs/<id>` | a call route |
+| `/architect/#/inboundcall/flows/<id>/latest` | a flow |
+| `/architect/#/inboundcall/flows/<id>/latest/menu/<nodeId>` | a flow (the node ID is ignored) |
+| `/architect/#/workflow/flows/<id>/...` | a flow |
+
+The ID is taken from the segment that follows `ivrs/` or `flows/`, not from the
+end of the URL — an Architect deep-link appends the GUID of whichever menu, task
+or state is open in the editor, and that is not the flow.
+
+### A call-route URL is not the same as a flow URL
 
 `/admin/routing/ivrs/<id>` is an IVR entity: phone numbers, a schedule group,
 and up to three flows (open hours, closed hours, holiday hours). Given that URL
@@ -391,12 +413,29 @@ reports unrecognised action types, unreachable steps and parse anomalies.
 
 ---
 
-## Tests
+## Tests and CI
 
 ```bash
-python -m unittest discover -s tests    # 41 tests
+python -m unittest discover -s tests    # 45 tests, all offline
 python tools/validate.py out            # parser coverage over real configs
 ```
+
+No credentials are needed: the whole suite runs against
+`samples/example-flow.json`, a synthetic flow written in the real Architect
+schema, so it exercises the same code paths a live flow does.
+
+[GitHub Actions](.github/workflows/ci.yml) runs three jobs on every push:
+
+| Job | What it checks |
+| --- | --- |
+| `tests` | The suite on Linux and Windows, Python 3.10 and 3.13, then rebuilds the sample documents and runs the coverage report. The generated documents are uploaded as a build artifact. |
+| `read-only guarantees` | `tests/test_security.py` on its own, plus a grep that fails the build if more than one mutating HTTP call site exists in the package. |
+| `no committed credentials` | Fails if a `.env` file is tracked or a credential-shaped value is committed. |
+
+## Licence
+
+[MIT](LICENSE). See [SECURITY.md](SECURITY.md) for the read-only guarantees and
+for guidance on handling generated reports, which contain real configuration.
 
 `tests/test_parse.py` runs against `samples/example-flow.json`, a synthetic flow
 written in the real Architect schema, so it exercises the same code paths a live
