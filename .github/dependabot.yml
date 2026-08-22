@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # The tool has one hard dependency (requests) and three optional extras, so
+  # updates are rare. Monthly keeps the noise down while still surfacing
+  # security advisories promptly.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Pinned action versions go stale silently; this keeps checkout, setup-python
+  # and upload-artifact current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
