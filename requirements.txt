@@ -1,0 +1,3 @@
+requests>=2.31
+anthropic>=1.0        # optional: only needed for --narrate
+python-dotenv>=1.0    # optional: convenience .env loading

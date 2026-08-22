@@ -1,0 +1,16 @@
+# Credentials -- never commit these
+.env
+*.env
+!.env.example
+
+# Generated documentation contains real configuration from a live organisation
+out/
+out_*/
+artifact/
+*.pdf
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/

@@ -1,0 +1,254 @@
+{
+  "name": "Acme Main IVR",
+  "description": "Front door for the Acme customer service line.",
+  "type": "inboundcall",
+  "defaultLanguage": "en-US",
+  "supportedLanguages": [{ "language": "en-US" }],
+  "initialSequence": "aaaa1111-0000-4000-8000-000000000001",
+  "nextTrackingNumber": 40,
+  "manifest": {
+    "queue": [
+      { "name": "Acme Sales", "id": "11111111-1111-4111-8111-111111111111" },
+      { "name": "Acme Technical Support", "id": "22222222-2222-4222-8222-222222222222" }
+    ],
+    "schedule": [{ "name": "Acme Working Hours", "id": "33333333-3333-4333-8333-333333333333" }],
+    "dataAction": [{ "name": "Look Up Account", "id": "44444444-4444-4444-8444-444444444444" }],
+    "userPrompt": [{ "name": "salesGreeting", "id": "55555555-5555-4555-8555-555555555555" }],
+    "ttsVoice": [{ "name": "Jill", "id": "genesys/Jill" }]
+  },
+  "variables": [
+    {
+      "__type": "StringVariable",
+      "name": "Flow.callerIntent",
+      "isInput": false,
+      "isOutput": true,
+      "description": { "config": { "lit": { "text": "What the caller asked for" } }, "text": "What the caller asked for", "type": "str" }
+    },
+    {
+      "__type": "BoolVariable",
+      "name": "Flow.isKnownCustomer",
+      "isInput": false,
+      "isOutput": false
+    }
+  ],
+  "flowSequenceItemList": [
+    {
+      "__type": "Task",
+      "id": "aaaa1111-0000-4000-8000-000000000001",
+      "name": "Opening Checks",
+      "trackingId": 10,
+      "startAction": "act-0001",
+      "paths": [{ "label": "Default", "outputId": "__DEFAULT__" }],
+      "variables": [],
+      "actionList": [
+        {
+          "__type": "EvaluateScheduleAction",
+          "id": "act-0001",
+          "name": "Evaluate Schedule",
+          "trackingId": 11,
+          "schedule": {
+            "config": { "lit": { "text": "Acme Working Hours", "type": "sch", "val": "33333333-3333-4333-8333-333333333333" } },
+            "text": "Acme Working Hours",
+            "type": "sch"
+          },
+          "paths": [
+            { "nextActionId": "act-0002", "label": "Active", "outputId": "__ACTIVE__" },
+            { "nextActionId": "act-0010", "label": "Inactive", "outputId": "__INACTIVE__" }
+          ]
+        },
+        {
+          "__type": "TransferMenuAction",
+          "id": "act-0002",
+          "name": "Go To Main Menu",
+          "trackingId": 12,
+          "menuReference": "bbbb2222-0000-4000-8000-000000000002",
+          "menuName": "Main Menu"
+        },
+        {
+          "__type": "PlayAudioAction",
+          "id": "act-0010",
+          "name": "Closed Message",
+          "trackingId": 13,
+          "nextAction": "act-0011",
+          "prompts": {
+            "defaultAudio": {
+              "config": {},
+              "text": "AudioPlaybackOptions(ToAudioTTS(\"We are closed. Our hours are nine to five, Monday to Friday.\"), true)",
+              "type": "aud",
+              "uiMetaData": {
+                "sequenceItems": [
+                  { "type": 0, "parameter": "We are closed. Our hours are nine to five, Monday to Friday." }
+                ]
+              }
+            },
+            "cases": []
+          }
+        },
+        {
+          "__type": "DisconnectAction",
+          "id": "act-0011",
+          "name": "End Closed Call",
+          "trackingId": 14
+        },
+        {
+          "__type": "PlayAudioAction",
+          "id": "act-0099",
+          "name": "Orphaned Announcement",
+          "trackingId": 39,
+          "prompts": {
+            "defaultAudio": {
+              "config": {},
+              "text": "AudioPlaybackOptions(ToAudioTTS(\"This step is not wired to anything.\"))",
+              "type": "aud",
+              "uiMetaData": { "sequenceItems": [{ "type": 0, "parameter": "This step is not wired to anything." }] }
+            },
+            "cases": []
+          }
+        }
+      ]
+    },
+    {
+      "__type": "Menu",
+      "id": "bbbb2222-0000-4000-8000-000000000002",
+      "name": "Main Menu",
+      "trackingId": 20,
+      "prompts": {
+        "defaultAudio": {
+          "config": {},
+          "text": "AudioPlaybackOptions(ToAudioTTS(\"Welcome to Acme. For sales press 1, for support press 2.\"), true)",
+          "type": "aud",
+          "uiMetaData": {
+            "sequenceItems": [
+              { "type": 0, "parameter": "Welcome to Acme. For sales press 1, for support press 2." }
+            ]
+          }
+        },
+        "cases": [
+          {
+            "__type": "AudioCase",
+            "langCode": "ar-AE",
+            "disabled": false,
+            "audioExpression": {
+              "config": {},
+              "text": "ToAudioTTS(\"Arabic welcome message.\")",
+              "type": "aud",
+              "uiMetaData": { "sequenceItems": [{ "type": 0, "parameter": "Arabic welcome message." }] }
+            }
+          }
+        ]
+      },
+      "menuChoiceList": [
+        {
+          "id": "choice-1",
+          "name": "Sales",
+          "digit": "1",
+          "speechRecTerms": { "en-US": ["sales"] },
+          "action": {
+            "__type": "TransferPureMatchAction",
+            "id": "act-0021",
+            "name": "Transfer to Sales",
+            "trackingId": 21,
+            "queues": [
+              {
+                "config": { "lit": { "text": "Acme Sales", "type": "que", "val": "11111111-1111-4111-8111-111111111111" } },
+                "text": "Acme Sales",
+                "type": "que"
+              }
+            ],
+            "preTransferAudio": {
+              "defaultAudio": {
+                "config": {},
+                "text": "ToAudioPrompt(Prompt.salesGreeting)",
+                "type": "aud",
+                "uiMetaData": {
+                  "sequenceItems": [
+                    { "type": 1, "isSystem": false, "name": "Prompt.salesGreeting", "expressionName": "Prompt.salesGreeting" }
+                  ]
+                }
+              },
+              "cases": []
+            },
+            "paths": [{ "nextActionId": "act-0022", "label": "Failure", "outputId": "__FAILURE__" }]
+          }
+        },
+        {
+          "id": "choice-2",
+          "name": "Support",
+          "digit": "2",
+          "speechRecTerms": { "en-US": ["support"] },
+          "action": {
+            "__type": "TransferPureMatchAction",
+            "id": "act-0023",
+            "name": "Transfer to Support",
+            "trackingId": 23,
+            "queues": [
+              {
+                "config": { "lit": { "text": "Acme Technical Support", "type": "que", "val": "22222222-2222-4222-8222-222222222222" } },
+                "text": "Acme Technical Support",
+                "type": "que"
+              }
+            ]
+          }
+        },
+        {
+          "id": "choice-3",
+          "name": "Accounts",
+          "digit": "3",
+          "speechRecTerms": { "en-US": ["accounts", "billing"] },
+          "action": {
+            "__type": "TransferExternalAction",
+            "id": "act-0024",
+            "name": "Transfer to Accounts",
+            "trackingId": 24,
+            "externalNumber": {
+              "config": { "lit": { "text": "+35315550123", "type": "phn" } },
+              "text": "+35315550123",
+              "type": "phn"
+            }
+          }
+        }
+      ],
+      "defaultMenuChoice": {
+        "id": "choice-default",
+        "name": "No Valid Selection",
+        "action": {
+          "__type": "DisconnectAction",
+          "id": "act-0025",
+          "name": "Hang Up",
+          "trackingId": 25
+        }
+      }
+    },
+    {
+      "__type": "Task",
+      "id": "cccc3333-0000-4000-8000-000000000003",
+      "name": "Transfer Failed",
+      "trackingId": 30,
+      "startAction": "act-0022",
+      "actionList": [
+        {
+          "__type": "PlayAudioAction",
+          "id": "act-0022",
+          "name": "Apologise",
+          "trackingId": 31,
+          "nextAction": "act-0026",
+          "prompts": {
+            "defaultAudio": {
+              "config": {},
+              "text": "AudioPlaybackOptions(ToAudioTTS(\"Sorry, we could not connect you.\"))",
+              "type": "aud",
+              "uiMetaData": { "sequenceItems": [{ "type": 0, "parameter": "Sorry, we could not connect you." }, { "type": 4, "parameter": 500 }] }
+            },
+            "cases": []
+          }
+        },
+        {
+          "__type": "DisconnectAction",
+          "id": "act-0026",
+          "name": "End Call",
+          "trackingId": 32
+        }
+      ]
+    }
+  ]
+}
