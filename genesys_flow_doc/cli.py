@@ -9,8 +9,8 @@ import os
 import re
 import sys
 
-from . import (fetch, mermaid, narrate, parse, pdf, render_business, render_html,
-               render_technical)
+from . import (fetch, layout, mermaid, narrate, parse, pdf, render_business,
+               render_html, render_technical)
 from .client import GenesysClient, GenesysError
 from .config import load_dotenv_if_present, parse_console_url, settings_from_env
 from .model import FlowDoc
@@ -22,9 +22,8 @@ def _formats(args: argparse.Namespace) -> set[str]:
     return {"html", "md"} if args.format == "both" else {args.format}
 
 
-def slugify(name: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", str(name)).strip("-").lower()
-    return slug or "flow"
+#: Kept as a module-level name because it is part of the CLI's surface.
+slugify = layout.slugify
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -72,73 +71,101 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def write_outputs(doc: FlowDoc, out_dir: str, narrate_summary: bool,
+def write_outputs(doc: FlowDoc, dest: layout.Destination, narrate_summary: bool,
                   formats: set[str]) -> list[str]:
-    os.makedirs(out_dir, exist_ok=True)
-    slug = slugify(doc.name)
+    """Write one flow's documents into its own folder tree."""
     written: list[str] = []
-    diagram = mermaid.render(doc)
+    diagram_source = mermaid.render(doc)
 
     summary = narrate.executive_summary(doc) if narrate_summary else None
     if summary:
         log.info("Added a Claude-written executive summary.")
 
-    targets: dict[str, str] = {}
+    # (artefact kind, filename suffix, content)
+    targets: list[tuple[str, str, str]] = []
     if "html" in formats:
         business_html = render_html.render_business(doc)
         if summary:
             business_html = narrate.insert_summary_html(business_html, summary)
-        targets[f"{slug}.business.html"] = business_html
-        targets[f"{slug}.technical.html"] = render_html.render_technical(doc, diagram)
+        targets.append((layout.HTML, "business.html", business_html))
+        targets.append((layout.HTML, "technical.html",
+                        render_html.render_technical(doc, diagram_source)))
     if "md" in formats:
         business_md = render_business.render(doc)
         if summary:
             business_md = narrate.insert_summary(business_md, summary)
-        targets[f"{slug}.business.md"] = business_md
-        targets[f"{slug}.technical.md"] = render_technical.render(doc)
-    targets[f"{slug}.flow.mmd"] = diagram
-    targets[f"{slug}.raw.json"] = json.dumps(doc.raw, indent=2, ensure_ascii=False)
+        targets.append((layout.MARKDOWN, "business.md", business_md))
+        targets.append((layout.MARKDOWN, "technical.md", render_technical.render(doc)))
+    targets.append((layout.DIAGRAM, "flow.mmd", diagram_source))
+    targets.append((layout.RAW, "raw.json",
+                    json.dumps(doc.raw, indent=2, ensure_ascii=False)))
 
-    for filename, content in targets.items():
-        path = os.path.join(out_dir, filename)
+    dest.ensure(sorted({kind for kind, _, _ in targets}))
+    for kind, suffix, content in targets:
+        path = dest.path_for(kind, suffix)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(content)
         written.append(path)
     return written
 
 
-def write_index(docs: list[FlowDoc], out_dir: str, region: str) -> str | None:
+def write_index(produced: list[tuple[FlowDoc, layout.Destination]], out_dir: str,
+                region: str) -> str | None:
     """A contents page linking every document produced in this run."""
-    if len(docs) < 2:
+    if len(produced) < 2:
         return None
     entries = []
-    for doc in docs:
-        slug = slugify(doc.name)
+    for doc, dest in produced:
         entries.append({
             "name": doc.name,
             "route": (doc.ivr or {}).get("name"),
+            "roles": list(doc.sibling_flows.keys()),
             "dnis": doc.dnis,
             "stages": len(doc.containers),
             "steps": sum(1 for _ in doc.all_nodes()),
             "audio": len(doc.all_speech()),
-            "business": f"{slug}.business.html",
-            "technical": f"{slug}.technical.html",
+            "business": dest.relative_to_root(layout.HTML, "business.html"),
+            "technical": dest.relative_to_root(layout.HTML, "technical.html"),
+            "folder": os.path.relpath(dest.base, out_dir).replace(os.sep, "/"),
         })
     path = os.path.join(out_dir, "index.html")
+    os.makedirs(out_dir, exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(render_html.render_index(entries, region))
     return path
 
 
 def _maybe_pdf(written: list[str], args: argparse.Namespace) -> list[str]:
-    """Convert any HTML just written to PDF, if the user asked for it."""
+    """Convert any HTML just written to PDF, if the user asked for it.
+
+    PDFs land in the flow's `pdf/` folder rather than beside the HTML, so each
+    artefact type stays in one place.
+    """
     if not getattr(args, "pdf", False):
         return []
     reports = [p for p in written if p.endswith(".html")]
     if not reports:
         return []
+
     print(f"\nRendering {len(reports)} PDF(s)...")
-    pdfs = pdf.convert_all(reports)
+    pdfs: list[str] = []
+    for report in reports:
+        html_dir = os.path.dirname(report)
+        if os.path.basename(html_dir) == layout.HTML:
+            # A flow report: its PDF belongs in the sibling pdf/ folder.
+            pdf_dir = os.path.join(os.path.dirname(html_dir), layout.PDF)
+        else:
+            # The contents page, which sits at the output root with no
+            # artefact folders around it.
+            pdf_dir = html_dir
+        os.makedirs(pdf_dir, exist_ok=True)
+        target = os.path.join(pdf_dir,
+                              os.path.basename(report)[: -len(".html")] + ".pdf")
+        try:
+            pdfs.append(pdf.html_to_pdf(report, target))
+        except Exception as exc:                       # noqa: BLE001 - keep going
+            log.warning("Could not convert %s: %s", os.path.basename(report), exc)
+
     for path in pdfs:
         print(f"  wrote {path}")
     if len(pdfs) < len(reports):
@@ -161,11 +188,10 @@ def jobs_for_ivr(ivr: dict, only: str | None = None) -> list[Job]:
 
 
 def generate(client: GenesysClient, jobs: list[Job], args: argparse.Namespace) -> int:
-    """Fetch, parse and write documents for each (role, flow) job."""
+    """Fetch, parse and write documents for each (route, flow) job."""
     written_total: list[str] = []
-    seen_flows: set[str] = set()
     failures: list[tuple[str, str]] = []
-    docs: list[FlowDoc] = []
+    produced: list[tuple[FlowDoc, layout.Destination]] = []
 
     # Shared across the whole run: the user-prompt index is one full listing,
     # and queue/data-action names repeat heavily between flows.
@@ -173,35 +199,53 @@ def generate(client: GenesysClient, jobs: list[Job], args: argparse.Namespace) -
     ref_cache: dict[str, str] = {}
     schedule_cache: dict[str, list[str]] = {}
 
+    # A flow can sit behind several routes. Its folder lives under each of
+    # them, because the document differs: it carries that route's numbers,
+    # schedule and sibling flows. Only the fetch is shared.
+    fetched: dict[str, tuple[dict, dict]] = {}
+    done: set[tuple[str | None, str]] = set()
+
     for role, fid, ivr_context, siblings in jobs:
         label = f"{role} flow" if role else "flow"
-        if fid in seen_flows:
-            log.info("Skipping %s -- already documented in this run", fid)
+        route_name = (ivr_context or {}).get("name")
+
+        # Within one route the same flow often fills several slots; the roles
+        # are already listed inside the document, so write it once.
+        if (route_name, fid) in done:
+            log.info("Skipping %s -- already written under %s", fid, route_name)
             continue
-        seen_flows.add(fid)
-        log.info("Fetching %s %s", label, fid)
+        done.add((route_name, fid))
+
         try:
-            meta, config = fetch.fetch_flow(client, fid)
+            if fid not in fetched:
+                log.info("Fetching %s %s", label, fid)
+                fetched[fid] = fetch.fetch_flow(client, fid)
+            meta, config = fetched[fid]
+
             doc = parse.parse_flow(config, meta)
             fetch.enrich(client, doc, ivr=ivr_context, siblings=siblings,
                          resolve_deps=not args.no_resolve, prompts=prompts,
                          ref_cache=ref_cache, schedule_cache=schedule_cache)
             if role:
                 doc.description = doc.description or (
-                    f"{role} flow for the {(ivr_context or {}).get('name', 'call route')}.")
-            written = write_outputs(doc, args.out, args.narrate, _formats(args))
+                    f"{role} flow for the {route_name or 'call route'}.")
+
+            dest = layout.Destination.for_flow(args.out, doc.name, route_name)
+            written = write_outputs(doc, dest, args.narrate, _formats(args))
         except Exception as exc:                      # noqa: BLE001 - keep going
             log.warning("Could not document %s (%s): %s", fid, label, exc)
             failures.append((fid, str(exc)))
             continue
-        docs.append(doc)
+
+        produced.append((doc, dest))
         written_total.extend(written)
+        location = os.path.relpath(dest.base, args.out).replace(os.sep, "/")
         print(f"\n{doc.name} ({label})")
-        for path in written:
-            print(f"  wrote {path}")
+        print(f"  {location}/  ->  {len(written)} file(s) in "
+              f"{', '.join(sorted({os.path.basename(os.path.dirname(p)) for p in written}))}")
 
     if "html" in _formats(args):
-        index = write_index(docs, args.out, client.settings.region)
+        index = write_index(produced, args.out, client.settings.region)
         if index:
             written_total.append(index)
             print(f"\n  wrote {index}    <- open this one first")
@@ -234,10 +278,13 @@ def run(args: argparse.Namespace) -> int:
             config = json.load(handle)
         doc = parse.parse_flow(config)
         doc.fetched_at = "regenerated offline from " + os.path.basename(args.offline)
-        written = write_outputs(doc, args.out, args.narrate, _formats(args))
+        # No route context offline, so it lands under flows/ rather than routes/.
+        dest = layout.Destination.for_flow(args.out, doc.name)
+        written = write_outputs(doc, dest, args.narrate, _formats(args))
         written.extend(_maybe_pdf(written, args))
         for path in written:
             print(f"wrote {path}")
+        print(f"\nDone - {len(written)} file(s) in {os.path.abspath(dest.base)}")
         return 0
 
     # --------------------------------------------------- whole-org listings

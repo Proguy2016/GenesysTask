@@ -619,35 +619,73 @@ def render_technical(doc: FlowDoc, mermaid_source: str = "") -> str:
 # index across a bulk run
 # --------------------------------------------------------------------------
 
-def render_index(entries: list[dict], region: str) -> str:
-    cards = []
-    for entry in sorted(entries, key=lambda x: x["name"].lower()):
-        numbers = ", ".join(entry["dnis"]) if entry["dnis"] else "No numbers attached"
-        route = entry.get("route") or "—"
-        cards.append(f"""<article class="card">
-  <span class="eyebrow">{e(route)}</span>
+def _flow_card(entry: dict) -> str:
+    roles = ", ".join(entry.get("roles") or []) or "—"
+    return f"""<article class="card">
+  <span class="eyebrow">{e(roles)}</span>
   <h3><a href="{e(entry['business'])}">{e(entry['name'])}</a></h3>
-  <p class="step__what">{e(numbers)}</p>
-  <p class="step__what">{entry['stages']} stages · {entry['steps']} steps · {entry['audio']} audio prompts</p>
+  <p class="step__what">{entry['stages']} stages &middot; {entry['steps']} steps &middot; {entry['audio']} audio prompts</p>
   <div class="card__links">
     <a href="{e(entry['business'])}">Business</a>
     <a href="{e(entry['technical'])}">Technical</a>
+    <a href="{e(entry['folder'])}/">Folder</a>
   </div>
-</article>""")
+</article>"""
+
+
+def render_index(entries: list[dict], region: str) -> str:
+    """Contents page, grouped by call route so it mirrors the folder tree."""
+    grouped: dict[str, list[dict]] = {}
+    for entry in entries:
+        grouped.setdefault(entry.get("route") or "", []).append(entry)
+
+    sections: list[tuple[str, str]] = [("overview", "At a glance")]
+    blocks: list[str] = []
 
     facts = _facts([
+        ("Call routes", str(len([k for k in grouped if k])), False),
         ("Flows documented", str(len(entries)), False),
         ("Steps described", str(sum(x["steps"] for x in entries)), False),
         ("Audio prompts", str(sum(x["audio"] for x in entries)), False),
         ("Region", e(region), True),
     ])
-    grid = '<div class="cards">' + "".join(cards) + "</div>"
+    blocks.append(_panel("overview", "At a glance", facts))
+
+    routed = sorted((k for k in grouped if k), key=str.lower)
+    if routed:
+        sections.append(("routes", "Call routes"))
+        parts = []
+        for route in routed:
+            flows = sorted(grouped[route], key=lambda x: x["name"].lower())
+            numbers = sorted({n for f in flows for n in f["dnis"]})
+            meta = ", ".join(numbers) if numbers else "no numbers attached"
+            parts.append(
+                f'<div class="stage"><div class="stage__head">'
+                f'<h3 id="{_slug("route-" + route)}">{e(route)}</h3>'
+                f'<span class="chip">{e(meta)}</span>'
+                f'<span class="chip">{len(flows)} flow{"s" if len(flows) != 1 else ""}</span>'
+                f'</div><div class="stage__body"><div class="cards">'
+                + "".join(_flow_card(f) for f in flows)
+                + "</div></div></div>")
+        blocks.append(_panel("routes", "Call routes", "".join(parts),
+                             "Each route below has its own folder, and each flow it uses has "
+                             "a folder inside that, holding the html, pdf, markdown, diagram "
+                             "and raw versions."))
+
+    unrouted = sorted(grouped.get("", []), key=lambda x: x["name"].lower())
+    if unrouted:
+        sections.append(("unrouted", "Flows without a route"))
+        blocks.append(_panel(
+            "unrouted", "Flows documented on their own",
+            '<div class="cards">' + "".join(_flow_card(f) for f in unrouted) + "</div>",
+            "Documented directly by flow ID, so there is no call route context: nothing "
+            "here records which numbers reach them or when."))
+
     subtitle = ("Every Architect call flow attached to a call route in this Genesys Cloud "
                 "organisation, documented for business and technical readers.")
+    meta = [f"{len(entries)} flows", f"{len(routed)} routes", e(region)]
     body = (f'<div class="page">'
-            f'{_masthead("Call flow documentation", "Flow Library", subtitle, [f"{len(entries)} flows", e(region)])}'
-            f'<main class="stack">'
-            f'{_panel("overview", "At a glance", facts)}'
-            f'{_panel("flows", "Flows", grid)}'
-            f"</main></div>")
+            f'{_masthead("Call flow documentation", "Flow Library", subtitle, meta)}'
+            f'<div class="layout">{_rail(sections)}'
+            f'<main class="stack">{"".join(blocks)}</main></div></div>')
     return _document("Flow Library", body)

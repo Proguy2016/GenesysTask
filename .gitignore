@@ -30,6 +30,10 @@ env/
 .mypy_cache/
 .ruff_cache/
 
+# uv, used locally to test against the minimum supported Python
+uv.lock
+uv*.exe
+
 # --- Editors and OS --------------------------------------------------------
 .idea/
 .vscode/

@@ -17,7 +17,8 @@ from genesys_flow_doc import parse, taxonomy
 
 
 def main(out_dir: str) -> int:
-    files = sorted(glob.glob(os.path.join(out_dir, "*.raw.json")))
+    # Output is nested per route/flow/artefact type, so search recursively.
+    files = sorted(glob.glob(os.path.join(out_dir, "**", "*.raw.json"), recursive=True))
     if not files:
         print(f"No *.raw.json under {out_dir}")
         return 1
@@ -30,7 +31,7 @@ def main(out_dir: str) -> int:
     totals = collections.Counter()
 
     for path in files:
-        name = os.path.basename(path).replace(".raw.json", "")
+        name = os.path.relpath(path, out_dir).replace(os.sep, "/").replace(".raw.json", "")
         with open(path, encoding="utf-8") as handle:
             config = json.load(handle)
         doc = parse.parse_flow(config)

@@ -32,16 +32,47 @@ technical specification.
 
 ## What it produces
 
-| File | Audience | Contains |
+Output mirrors the way the configuration is organised — a call route owns
+flows, and a flow owns its documents:
+
+```
+out/
+  index.html                                  contents page, grouped by route
+  routes/
+    testt-call/                               a call route
+      customer-care-ivr-by-claude/            a flow it points at
+        html/       .business.html   .technical.html
+        pdf/        .business.pdf    .technical.pdf
+        markdown/   .business.md     .technical.md
+        diagram/    .flow.mmd
+        raw/        .raw.json
+      another-flow/                           same route, different slot
+        ...
+  flows/
+    some-flow/                                documented with --flow, so it
+      ...                                     has no call route context
+```
+
+Files keep the flow name inside them (`customer-care-ivr-by-claude.business.pdf`)
+even though the folder already carries it — a PDF is usually detached from its
+folder the moment someone emails it.
+
+A flow used by several routes gets a folder under **each** of them, because the
+document genuinely differs: it carries that route's numbers, schedule and
+sibling flows. Only the API fetch is shared. Within one route, a flow filling
+several slots (open *and* closed *and* holiday) is written once, with the roles
+listed inside.
+
+| Document | Audience | Contains |
 | --- | --- | --- |
-| `<flow>.business.html` | Operations, CX, QA, training, clients | What callers experience, menu options, where calls end up, every word spoken, what the flow relies on, points to confirm |
-| `<flow>.technical.html` | Architect admins, developers | Every stage and action in execution order with its full configuration, variables, dependencies, audio inventory, coverage notes, provenance |
+| `html/*.business.html` | Operations, CX, QA, training, clients | What callers experience, menu options, where calls end up, every word spoken, what the flow relies on, points to confirm |
+| `html/*.technical.html` | Architect admins, developers | Every stage and action in execution order with its full configuration, variables, dependencies, audio inventory, coverage notes, provenance |
 | *(both reports)* | | An inline SVG diagram per stage, drawn by the tool itself — no JavaScript, scales, prints |
-| `<flow>.business.pdf` / `<flow>.technical.pdf` | Anyone | The same reports as PDF, rendered locally |
+| `pdf/*.pdf` | Anyone | The same reports as PDF, rendered locally |
+| `markdown/*.md` | Confluence, wikis, git diffs | The same content as Markdown |
+| `diagram/*.flow.mmd` | Developers | Mermaid source for the same graph |
+| `raw/*.raw.json` | Both | Unmodified flow configuration, so documents can be rebuilt with no API access |
 | `index.html` | Everyone | Contents page across a whole-organisation run |
-| `<flow>.business.md` / `<flow>.technical.md` | Confluence, wikis, git diffs | The same content as Markdown |
-| `<flow>.flow.mmd` | Developers | Mermaid source for the same graph, for pasting into GitHub or GitLab |
-| `<flow>.raw.json` | Both | Unmodified flow configuration, so documents can be rebuilt with no API access |
 
 The HTML reports are single self-contained files — inlined stylesheet, no build
 step, no assets folder.
@@ -135,7 +166,7 @@ python -m genesys_flow_doc --flow <guid> --only open
 python -m genesys_flow_doc --list
 
 # Rebuild documents from a saved configuration — no API calls, no credentials
-python -m genesys_flow_doc --offline out/lab-ivr-flow.raw.json
+python -m genesys_flow_doc --offline out/routes/lab-call-route/lab-ivr-flow/raw/lab-ivr-flow.raw.json
 ```
 
 | Flag | Effect |
@@ -268,13 +299,15 @@ genesys_flow_doc/
   render_html.py       business, technical and index HTML
   render_business.py   business Markdown, and the shared `describe()` sentences
   render_technical.py  technical Markdown
+  layout.py            where each generated file goes on disk
   diagram.py           lays out and draws the inline SVG flow diagrams
   mermaid.py           Mermaid source for the same graph
   narrate.py           optional Claude-written executive summary
   pdf.py               HTML -> PDF via a local headless browser
 samples/example-flow.json   synthetic flow in the real Architect schema
-tests/test_parse.py         25 tests over that sample
-tests/test_security.py      16 tests asserting the guarantees above
+tests/test_parse.py         parsing, rendering and URL handling
+tests/test_layout.py        the output tree and slug safety
+tests/test_security.py      the read-only and injection guarantees
 tools/validate.py           coverage report over a directory of raw configs
 ```
 
@@ -416,7 +449,7 @@ reports unrecognised action types, unreachable steps and parse anomalies.
 ## Tests and CI
 
 ```bash
-python -m unittest discover -s tests    # 45 tests, all offline
+python -m unittest discover -s tests    # 57 tests, all offline
 python tools/validate.py out            # parser coverage over real configs
 ```
 

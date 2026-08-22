@@ -185,10 +185,19 @@ def _choose_outputs(args: argparse.Namespace, offline: bool = False) -> None:
     args.verbose = prompt.confirm("Show detailed progress?", default=False)
 
 
+def _find(directory: str, pattern: str) -> list[str]:
+    """Every match anywhere under `directory`.
+
+    Output is nested one folder per route, per flow, per artefact type, so a
+    flat glob would find nothing.
+    """
+    return sorted(glob.glob(os.path.join(directory, "**", pattern), recursive=True))
+
+
 def _offline_flow(args: argparse.Namespace) -> argparse.Namespace | None:
-    saved = sorted(glob.glob(os.path.join(args.out, "*.raw.json")))
+    saved = _find(args.out, "*.raw.json")
     if saved:
-        items = [(path, os.path.basename(path).replace(".raw.json", "")) for path in saved]
+        items = [(path, os.path.relpath(path, args.out).replace(os.sep, "/")) for path in saved]
         items.insert(0, ("__typed__", "Enter a different path..."))
         chosen = prompt.pick("Which saved configuration?", items,
                              subtitle=f"found in {os.path.abspath(args.out)}")
@@ -206,7 +215,7 @@ def _offline_flow(args: argparse.Namespace) -> argparse.Namespace | None:
 def _pdf_only_flow(args: argparse.Namespace) -> None:
     """Convert already-generated HTML reports without touching the API."""
     directory = prompt.ask("Directory containing the HTML reports", default=args.out)
-    reports = sorted(glob.glob(os.path.join(directory, "*.html")))
+    reports = _find(directory, "*.html")
     if not reports:
         prompt.warn(f"  No .html files in {os.path.abspath(directory)}.")
         return
@@ -219,7 +228,8 @@ def _pdf_only_flow(args: argparse.Namespace) -> None:
     )
     targets = reports
     if scope == "one":
-        items = [(path, os.path.basename(path)) for path in reports]
+        items = [(path, os.path.relpath(path, directory).replace(os.sep, "/"))
+                 for path in reports]
         targets = [prompt.pick("Which report?", items)]
 
     renderer = pdf.find_browser()
