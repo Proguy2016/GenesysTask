@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genesys-flow-doc"
+version = "1.0.0"
+description = "Generate business and technical documentation for Genesys Cloud Architect call flows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = ["genesys", "genesys-cloud", "architect", "ivr", "call-flow", "documentation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Telecommunications Industry",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Documentation",
+    "Topic :: Communications :: Telephony",
+]
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# Only needed for the Claude-written executive summary (--narrate).
+narrate = ["anthropic>=1.0"]
+# Convenience .env loading; the tool falls back to a built-in parser without it.
+dotenv = ["python-dotenv>=1.0"]
+# A bundled Chromium for PDF export, if Chrome or Edge is not installed.
+pdf = ["playwright>=1.40"]
+all = ["anthropic>=1.0", "python-dotenv>=1.0", "playwright>=1.40"]
+
+[project.scripts]
+genesys-flow-doc = "genesys_flow_doc.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Proguy2016/GenesysTask"
+Issues = "https://github.com/Proguy2016/GenesysTask/issues"
+
+[tool.setuptools]
+packages = ["genesys_flow_doc"]
+
+[tool.setuptools.package-data]
+genesys_flow_doc = ["py.typed"]
