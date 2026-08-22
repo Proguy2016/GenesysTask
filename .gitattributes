@@ -1,0 +1,22 @@
+# Normalise line endings so the repository is identical regardless of the
+# platform a contributor works on. Without this, editing on Windows turns every
+# file into a whole-file diff the first time it is touched.
+* text=auto eol=lf
+
+# Windows-only files that must keep CRLF to run correctly.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary: never convert, never diff as text.
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.pdf  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+
+# Generated fixtures are large and mechanical; collapse them in diffs and
+# exclude them from language statistics.
+samples/*.json linguist-generated=true

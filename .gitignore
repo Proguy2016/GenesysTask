@@ -1,16 +1,38 @@
-# Credentials -- never commit these
+# --- Credentials -----------------------------------------------------------
+# Never commit these. If one is committed by accident, rotate the OAuth client
+# in Genesys Cloud; deleting the file afterwards is not enough on its own.
 .env
+.env.*
 *.env
 !.env.example
 
-# Generated documentation contains real configuration from a live organisation
+# --- Generated documentation -----------------------------------------------
+# Reports contain real configuration from a live organisation: phone numbers,
+# queue names, user names, prompt wording, integration names. Keep them out of
+# version control unless they have been deliberately reviewed and cleared.
 out/
 out_*/
+ci-out/
+files/
 artifact/
 *.pdf
 
+# --- Python ----------------------------------------------------------------
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
+dist/
 .venv/
 venv/
+env/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Editors and OS --------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
