@@ -171,20 +171,51 @@ class RenderTests(unittest.TestCase):
 
 
 class UrlTests(unittest.TestCase):
-    def test_ivr_url(self):
+    ROUTE = "5ffacb01-3ae5-49e9-8e54-58d4f32c76f7"
+    FLOW = "b97e0e67-65fd-4d9a-a899-da5f24e702ba"
+    NODE = "789c1de8-e833-4645-82b3-df8cedb7e3fd"
+
+    def test_call_route_url(self):
         target = parse_console_url(
-            "https://apps.mypurecloud.ie/directory/#/admin/routing/ivrs/"
-            "5ffacb01-3ae5-49e9-8e54-58d4f32c76f7")
-        self.assertEqual(target.kind, "ivr")
-        self.assertEqual(target.entity_id, "5ffacb01-3ae5-49e9-8e54-58d4f32c76f7")
-        self.assertEqual(target.region, "mypurecloud.ie")
+            f"https://apps.mypurecloud.ie/directory/#/admin/routing/ivrs/{self.ROUTE}")
+        self.assertEqual((target.kind, target.entity_id, target.region),
+                         ("ivr", self.ROUTE, "mypurecloud.ie"))
 
     def test_flow_url(self):
         target = parse_console_url(
-            "https://apps.mypurecloud.com/architect/#/inboundcall/flows/"
-            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/latest")
-        self.assertEqual(target.kind, "flow")
-        self.assertEqual(target.region, "mypurecloud.com")
+            f"https://apps.mypurecloud.com/architect/#/inboundcall/flows/{self.FLOW}/latest")
+        self.assertEqual((target.kind, target.entity_id, target.region),
+                         ("flow", self.FLOW, "mypurecloud.com"))
+
+    def test_architect_deep_link_selects_the_flow_not_the_selected_node(self):
+        """An open menu or task adds a second GUID after the flow's own."""
+        for suffix in (f"/latest/menu/{self.NODE}",
+                       f"/latest/task/{self.NODE}",
+                       f"/latest/state/{self.NODE}"):
+            target = parse_console_url(
+                f"https://apps.mypurecloud.ie/architect/#/inboundcall/flows/"
+                f"{self.FLOW}{suffix}")
+            self.assertEqual(target.kind, "flow", suffix)
+            self.assertEqual(target.entity_id, self.FLOW, suffix)
+            self.assertNotEqual(target.entity_id, self.NODE, suffix)
+
+    def test_other_flow_types_are_recognised(self):
+        for flow_type in ("workflow", "inboundchat", "inboundemail", "outboundcall",
+                          "inqueuecall", "bot", "voicesurvey"):
+            target = parse_console_url(
+                f"https://apps.mypurecloud.ie/architect/#/{flow_type}/flows/"
+                f"{self.FLOW}/latest/menu/{self.NODE}")
+            self.assertEqual((target.kind, target.entity_id), ("flow", self.FLOW), flow_type)
+
+    def test_query_string_and_trailing_segments_do_not_confuse_it(self):
+        target = parse_console_url(
+            f"https://apps.mypurecloud.ie/directory/#/admin/routing/ivrs/{self.ROUTE}"
+            f"?tab=general&ref={self.NODE}")
+        self.assertEqual((target.kind, target.entity_id), ("ivr", self.ROUTE))
+
+    def test_a_bare_guid_url_still_resolves(self):
+        target = parse_console_url(f"https://apps.mypurecloud.ie/some/page/{self.ROUTE}")
+        self.assertEqual(target.entity_id, self.ROUTE)
 
 
 if __name__ == "__main__":

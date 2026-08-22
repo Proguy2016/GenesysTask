@@ -119,12 +119,21 @@ def normalise_region(region: str) -> str:
     return region
 
 
-def parse_console_url(url: str) -> Target:
-    """Turn a Genesys Cloud admin URL into a target we can fetch.
+#: The ID we want is the one that directly follows its collection segment.
+#: Architect deep-links carry further GUIDs for the selected node, e.g.
+#:   /architect/#/inboundcall/flows/<flowId>/latest/menu/<menuId>
+#: so picking the last GUID in the URL would select the menu, not the flow.
+_COLLECTION_ID = re.compile(r"/(ivrs|flows)/(" + _GUID + r")", re.IGNORECASE)
 
-    Handles the two shapes that matter:
-      .../directory/#/admin/routing/ivrs/<guid>        -> an IVR (call route) entity
-      .../directory/#/admin/architect/flows/<guid>     -> a flow
+
+def parse_console_url(url: str) -> Target:
+    """Turn a Genesys Cloud console URL into a target we can fetch.
+
+    Handles the shapes the console actually produces:
+      .../directory/#/admin/routing/ivrs/<guid>                    -> call route
+      .../architect/#/inboundcall/flows/<guid>/latest              -> flow
+      .../architect/#/inboundcall/flows/<guid>/latest/menu/<guid>  -> flow
+      .../architect/#/workflow/flows/<guid>/latest/task/<guid>     -> flow
     """
     parsed = urlparse(url)
     host = parsed.netloc
@@ -134,6 +143,15 @@ def parse_console_url(url: str) -> Target:
         pass
 
     blob = f"{parsed.path}{parsed.params}{parsed.query}{parsed.fragment}"
+
+    match = _COLLECTION_ID.search(blob)
+    if match:
+        collection = match.group(1).lower()
+        return Target(kind="ivr" if collection == "ivrs" else "flow",
+                      entity_id=match.group(2), region=region)
+
+    # No recognised collection segment: fall back to the last GUID present and
+    # infer the kind from the rest of the path.
     ids = re.findall(_GUID, blob)
     entity_id = ids[-1] if ids else None
 
